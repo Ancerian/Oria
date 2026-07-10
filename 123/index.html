@@ -1,0 +1,2584 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ORIA 2.0 — интерактивная карта экранов</title>
+  <style>
+    :root {
+      --bg: #FAFAF8;
+      --surface: #FFFFFF;
+      --surface-soft: #F3F4EF;
+      --border: #E4E2DC;
+      --ink: #242822;
+      --ink-muted: #747B6F;
+      --growth: #5B7A5B;
+      --growth-soft: rgba(91, 122, 91, 0.13);
+      --bloom: #D4A24C;
+      --bloom-soft: rgba(212, 162, 76, 0.17);
+      --danger: #9C5A4A;
+      --shadow: 0 20px 50px rgba(36, 40, 34, 0.08);
+      --shadow-soft: 0 10px 24px rgba(36, 40, 34, 0.07);
+      --radius: 8px;
+      --sidebar: 340px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(91, 122, 91, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 122, 91, 0.045) 1px, transparent 1px),
+        var(--bg);
+      background-size: 28px 28px;
+      font-family: Outfit, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      min-height: 36px;
+      padding: 0 12px;
+    }
+
+    button:hover,
+    button[aria-pressed="true"] {
+      border-color: var(--growth);
+      background: var(--growth-soft);
+    }
+
+    button.primary {
+      border-color: var(--growth);
+      background: var(--growth);
+      color: var(--surface);
+    }
+
+    input,
+    select {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      min-height: 36px;
+      padding: 0 12px;
+      outline-color: var(--growth);
+    }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: start;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(250, 250, 248, 0.92);
+      backdrop-filter: blur(16px);
+      position: relative;
+      z-index: 20;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: clamp(26px, 3vw, 38px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .title-block p {
+      margin: 8px 0 0;
+      color: var(--ink-muted);
+      max-width: 820px;
+      line-height: 1.45;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(86px, 1fr));
+      gap: 8px;
+      min-width: 300px;
+    }
+
+    .stat {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .stat b {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 26px;
+      line-height: 1;
+      color: var(--growth);
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink-muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      grid-column: 1 / -1;
+      margin-top: 12px;
+    }
+
+    .control-spacer {
+      flex: 1 1 auto;
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--sidebar);
+    }
+
+    .board-shell {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      position: relative;
+      border-right: 1px solid var(--border);
+    }
+
+    .board {
+      width: 2300px;
+      height: 2240px;
+      position: relative;
+      transform-origin: 0 0;
+      transition: transform 180ms ease;
+    }
+
+    .lane {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      height: 360px;
+      border-top: 1px solid rgba(91, 122, 91, 0.18);
+      pointer-events: none;
+    }
+
+    .lane-label {
+      position: absolute;
+      top: -13px;
+      left: 0;
+      padding: 3px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg);
+      color: var(--ink-muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    #edges {
+      position: absolute;
+      inset: 0;
+      overflow: visible;
+      z-index: 1;
+      pointer-events: auto;
+    }
+
+    .edge {
+      pointer-events: auto;
+    }
+
+    .edge-hit {
+      fill: none;
+      stroke: rgba(91, 122, 91, 0.001);
+      stroke-width: 16;
+      cursor: pointer;
+      pointer-events: stroke;
+    }
+
+    .edge-line {
+      fill: none;
+      stroke: rgba(91, 122, 91, 0.32);
+      stroke-width: 1.6;
+      marker-end: url(#arrow);
+      transition: stroke 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
+    }
+
+    .edge-label-bg {
+      fill: var(--bg);
+      stroke: rgba(228, 226, 220, 0.95);
+      stroke-width: 1;
+      rx: 6;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .edge-label {
+      fill: var(--ink-muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .edge-anchor {
+      fill: rgba(91, 122, 91, 0.001);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .edge.is-muted {
+      opacity: 0.12;
+    }
+
+    .edge.is-active .edge-line,
+    .edge:hover .edge-line {
+      stroke: var(--growth);
+      stroke-width: 3;
+      opacity: 1;
+    }
+
+    .edge.is-selected .edge-line {
+      stroke: var(--growth);
+      stroke-width: 4;
+      opacity: 1;
+      filter: drop-shadow(0 4px 8px rgba(91, 122, 91, 0.22));
+    }
+
+    .edge.is-selected .edge-label-bg {
+      fill: var(--surface);
+      stroke: var(--growth);
+    }
+
+    .edge.is-selected .edge-label {
+      fill: var(--ink);
+      font-weight: 700;
+    }
+
+    .edge.is-incoming .edge-line {
+      stroke: var(--bloom);
+      stroke-width: 2.6;
+      opacity: 1;
+    }
+
+    .edge.is-limit .edge-line {
+      stroke-dasharray: 6 5;
+      stroke: rgba(156, 90, 74, 0.55);
+    }
+
+    .edge.is-tab .edge-line {
+      stroke: rgba(116, 123, 111, 0.28);
+      stroke-dasharray: 3 5;
+    }
+
+    .screen {
+      position: absolute;
+      width: 190px;
+      min-height: 322px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      z-index: 3;
+      padding: 10px;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+      cursor: zoom-in;
+    }
+
+    .screen.desktop {
+      width: 300px;
+      min-height: 226px;
+      padding: 10px;
+    }
+
+    .screen:hover,
+    .screen.is-selected {
+      border-color: var(--growth);
+      box-shadow: 0 18px 38px rgba(91, 122, 91, 0.18);
+      transform: translateY(-2px);
+    }
+
+    .screen.is-muted {
+      opacity: 0.28;
+    }
+
+    .screen.is-target {
+      border-color: var(--bloom);
+    }
+
+    .screen-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .screen-title {
+      min-width: 0;
+    }
+
+    .screen-title strong {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 16px;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .screen-title span {
+      display: block;
+      color: var(--ink-muted);
+      font-size: 11px;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 3px 7px;
+      color: var(--ink-muted);
+      font-size: 10px;
+      font-weight: 500;
+      background: var(--surface-soft);
+    }
+
+    .preview {
+      height: 246px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .desktop .preview {
+      height: 152px;
+    }
+
+    .mock-app {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 6px;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 10px;
+      line-height: 1.25;
+      padding: 8px;
+      cursor: default;
+    }
+
+    .mock-app.desktop {
+      grid-template-columns: 56px 1fr;
+      grid-template-rows: 1fr;
+      gap: 8px;
+      padding: 8px;
+    }
+
+    .mock-app.live {
+      position: relative;
+      min-height: 520px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      font-size: 13px;
+      padding: 14px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.58);
+    }
+
+    .mock-app.live.mobile {
+      width: min(100%, 318px);
+      margin: 0 auto;
+      min-height: 560px;
+    }
+
+    .mock-app.live.desktop {
+      width: 100%;
+      min-height: 380px;
+      grid-template-columns: 86px 1fr;
+    }
+
+    .mock-app.fullscreen {
+      position: relative;
+      width: min(100%, 390px);
+      min-height: min(760px, calc(100dvh - 112px));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      font-size: 15px;
+      padding: 18px;
+      box-shadow: 0 30px 80px rgba(36, 40, 34, 0.16);
+    }
+
+    .mock-app.fullscreen.desktop {
+      width: min(100%, 980px);
+      min-height: min(640px, calc(100dvh - 112px));
+      grid-template-columns: 118px 1fr;
+    }
+
+    .mock-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .mock-title {
+      min-width: 0;
+    }
+
+    .mock-title strong {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 13px;
+      line-height: 1.05;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live .mock-title strong {
+      font-size: 21px;
+    }
+
+    .mock-title span {
+      display: block;
+      color: var(--ink-muted);
+      font-size: 9px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live .mock-title span {
+      font-size: 12px;
+    }
+
+    .mock-chip {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink-muted);
+      padding: 2px 6px;
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    .live .mock-chip {
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+
+    .mock-body {
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+    }
+
+    .live .mock-body {
+      gap: 10px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .mock-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 7px;
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      box-shadow: 0 5px 14px rgba(36, 40, 34, 0.04);
+    }
+
+    .live .mock-card {
+      padding: 10px;
+      gap: 7px;
+    }
+
+    .mock-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .mock-row.between {
+      justify-content: space-between;
+    }
+
+    .mock-list {
+      display: grid;
+      gap: 5px;
+    }
+
+    .mock-main {
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mock-muted {
+      color: var(--ink-muted);
+      font-size: 9px;
+    }
+
+    .live .mock-muted {
+      font-size: 12px;
+    }
+
+    .mock-progress {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .mock-progress i {
+      display: block;
+      height: 100%;
+      width: var(--value, 50%);
+      border-radius: inherit;
+      background: var(--growth);
+    }
+
+    .mock-app button,
+    .mock-app input,
+    .mock-app select {
+      min-height: 0;
+      border-radius: 7px;
+      font-size: inherit;
+      line-height: 1.15;
+    }
+
+    .mock-btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 5px 7px;
+      cursor: pointer;
+    }
+
+    .mock-btn.primary {
+      border-color: var(--growth);
+      background: var(--growth);
+      color: var(--surface);
+    }
+
+    .mock-btn.bloom {
+      border-color: var(--bloom);
+      background: var(--bloom);
+      color: var(--ink);
+    }
+
+    .mock-btn.ghost {
+      background: transparent;
+    }
+
+    .mock-btn.is-active,
+    .mock-choice.is-active,
+    .mock-node.is-active,
+    .mock-skin.is-active {
+      border-color: var(--growth);
+      background: var(--growth-soft);
+      box-shadow: inset 0 0 0 1px rgba(91, 122, 91, 0.12);
+    }
+
+    .mock-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 5px 7px;
+      color: var(--ink);
+    }
+
+    .mock-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      gap: 4px;
+      border-top: 1px solid var(--border);
+      padding-top: 5px;
+    }
+
+    .desktop .mock-bottom {
+      grid-row: 1;
+      grid-column: 1;
+      border-top: 0;
+      border-right: 1px solid var(--border);
+      padding: 4px 6px 4px 0;
+      display: grid;
+      align-content: start;
+      justify-content: stretch;
+    }
+
+    .desktop .mock-screen {
+      grid-column: 2;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 8px;
+    }
+
+    .mock-tab {
+      border: 0;
+      background: transparent;
+      color: var(--ink-muted);
+      padding: 3px;
+      display: grid;
+      justify-items: center;
+      gap: 2px;
+      cursor: pointer;
+    }
+
+    .mock-tab i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      display: block;
+    }
+
+    .mock-tab.is-active {
+      color: var(--growth);
+      font-weight: 700;
+    }
+
+    .mock-tab.is-active i {
+      background: var(--growth);
+    }
+
+    .mock-branch {
+      position: relative;
+      height: 106px;
+      color: var(--growth);
+    }
+
+    .live .mock-branch {
+      height: 170px;
+    }
+
+    .mock-branch svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .mock-node {
+      position: absolute;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .live .mock-node {
+      width: 26px;
+      height: 26px;
+    }
+
+    .mock-node.done {
+      border-color: var(--growth);
+      background: var(--growth);
+    }
+
+    .mock-node.bloom {
+      border-color: var(--bloom);
+      background: var(--bloom);
+    }
+
+    .mock-choice {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 6px 7px;
+      cursor: pointer;
+    }
+
+    .mock-choice.is-correct {
+      border-color: var(--growth);
+      background: var(--growth-soft);
+    }
+
+    .mock-choice.is-wrong {
+      border-color: var(--danger);
+      background: rgba(156, 90, 74, 0.1);
+    }
+
+    .mock-bubble {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 7px;
+      max-width: 88%;
+    }
+
+    .mock-bubble.user {
+      margin-left: auto;
+      background: var(--growth-soft);
+      border-color: rgba(91, 122, 91, 0.28);
+    }
+
+    .mock-mascot {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--growth);
+      background: radial-gradient(circle at 50% 45%, #E9E1D5 0 28%, var(--surface) 30% 100%);
+      flex: 0 0 auto;
+    }
+
+    .live .mock-mascot {
+      width: 82px;
+      height: 82px;
+    }
+
+    .mock-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .mock-metric {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 7px;
+    }
+
+    .mock-metric strong {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 18px;
+      color: var(--growth);
+    }
+
+    .mock-skins {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+
+    .mock-skin {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 8px 5px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .live-preview {
+      margin: 14px 0;
+    }
+
+    .fullscreen-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      place-items: stretch;
+      padding: 0;
+      background: rgba(36, 40, 34, 0.36);
+      backdrop-filter: blur(18px);
+    }
+
+    .fullscreen-viewer[hidden] {
+      display: none;
+    }
+
+    .fullscreen-dialog {
+      width: 100%;
+      height: 100dvh;
+      max-height: 100dvh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 14px;
+      border: 0;
+      border-radius: 0;
+      background: rgba(250, 250, 248, 0.96);
+      box-shadow: 0 34px 90px rgba(36, 40, 34, 0.28);
+      padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+      overflow: hidden;
+    }
+
+    .fullscreen-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 2px 2px 0;
+    }
+
+    .fullscreen-title {
+      min-width: 0;
+    }
+
+    .fullscreen-title strong {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 26px;
+      line-height: 1.08;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .fullscreen-title span {
+      display: block;
+      color: var(--ink-muted);
+      margin-top: 3px;
+      font-size: 13px;
+    }
+
+    .fullscreen-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .fullscreen-canvas {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      place-items: start center;
+      padding: 4px 4px 10px;
+    }
+
+    .fullscreen-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+
+    .fullscreen-link {
+      min-height: 34px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    body.has-fullscreen {
+      overflow: hidden;
+    }
+
+    .mini-status {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      height: 8px;
+      width: 54px;
+      border-radius: 99px;
+      background: var(--border);
+    }
+
+    .mini-title {
+      position: absolute;
+      left: 12px;
+      top: 26px;
+      width: 90px;
+      height: 12px;
+      border-radius: 6px;
+      background: var(--growth);
+      opacity: 0.85;
+    }
+
+    .mini-line {
+      position: absolute;
+      left: 12px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--border);
+    }
+
+    .mini-card {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .mini-card::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      width: 72px;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--growth);
+    }
+
+    .mini-card::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 26px;
+      width: 110px;
+      height: 5px;
+      border-radius: 99px;
+      background: var(--border);
+    }
+
+    .mini-button {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      height: 26px;
+      border-radius: 8px;
+      background: var(--growth);
+    }
+
+    .mini-tabbar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 28px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+    }
+
+    .mini-tabbar i {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--border);
+      display: block;
+    }
+
+    .mini-tabbar i:first-child {
+      background: var(--growth);
+    }
+
+    .mini-branch {
+      position: absolute;
+      left: 22px;
+      top: 62px;
+      width: 132px;
+      height: 120px;
+    }
+
+    .mini-branch svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .mini-node {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+    }
+
+    .mini-node.done {
+      border-color: var(--growth);
+      background: var(--growth);
+    }
+
+    .mini-node.current {
+      border-color: var(--growth);
+      box-shadow: inset 0 0 0 4px var(--surface), inset 0 0 0 8px var(--growth);
+    }
+
+    .mini-node.bloom {
+      border-color: var(--bloom);
+      background: var(--bloom);
+    }
+
+    .mini-mascot {
+      position: absolute;
+      left: 50%;
+      top: 52px;
+      width: 92px;
+      height: 92px;
+      margin-left: -46px;
+      border-radius: 50%;
+      border: 2px solid var(--growth);
+      background: var(--surface);
+    }
+
+    .mini-mascot::before {
+      content: "";
+      position: absolute;
+      left: 26px;
+      top: 25px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #E9E1D5;
+      border: 1px solid var(--border);
+    }
+
+    .mini-grid {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 96px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .mini-grid span {
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .mini-paywall {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      top: 58px;
+      bottom: 24px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .screen-footer {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--ink-muted);
+      font-size: 11px;
+    }
+
+    .degree {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .degree i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--growth);
+      opacity: 0.55;
+    }
+
+    .inspector {
+      min-width: 0;
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(16px);
+      padding: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    .panel h2 {
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .panel h3 {
+      font-size: 18px;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+
+    .panel p {
+      color: var(--ink-muted);
+      line-height: 1.45;
+      margin: 10px 0 0;
+    }
+
+    .detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--ink-muted);
+      font-size: 12px;
+      background: var(--surface-soft);
+    }
+
+    .pill::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--growth);
+    }
+
+    .pill.limit::before {
+      background: var(--danger);
+    }
+
+    .pill.desktop::before {
+      background: var(--bloom);
+    }
+
+    .transition-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .transition-item {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      min-height: 0;
+      padding: 9px 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .transition-item strong {
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .transition-item span {
+      color: var(--ink-muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .legend {
+      display: grid;
+      gap: 9px;
+      margin-top: 12px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--ink-muted);
+      font-size: 13px;
+    }
+
+    .legend-line {
+      width: 34px;
+      height: 0;
+      border-top: 2px solid var(--growth);
+    }
+
+    .legend-line.tab {
+      border-top-color: rgba(116, 123, 111, 0.55);
+      border-top-style: dashed;
+    }
+
+    .legend-line.limit {
+      border-top-color: var(--danger);
+      border-top-style: dashed;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(520px, 1fr) auto;
+      }
+
+      .board-shell {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .inspector {
+        max-height: 420px;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar {
+        padding: 14px;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .controls input,
+      .controls select,
+      .controls button {
+        width: 100%;
+      }
+
+      .stats {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .stat {
+        padding: 8px;
+      }
+
+      .stat b {
+        font-size: 22px;
+      }
+    }
+
+    @media (max-width: 700px) {
+      body {
+        background-size: 22px 22px;
+      }
+
+      .app {
+        height: 100dvh;
+      }
+
+      .topbar {
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .title-block h1 {
+        font-size: 26px;
+      }
+
+      .title-block p {
+        font-size: 13px;
+      }
+
+      .stats {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .stat span {
+        white-space: normal;
+      }
+
+      .main {
+        grid-template-rows: minmax(58dvh, 1fr) minmax(260px, 34dvh);
+      }
+
+      .inspector {
+        padding: 12px;
+      }
+
+      .panel {
+        border-radius: 10px;
+        padding: 12px;
+      }
+
+      .fullscreen-viewer {
+        padding: 0;
+        place-items: stretch;
+      }
+
+      .fullscreen-dialog {
+        width: 100%;
+        max-height: 100dvh;
+        height: 100dvh;
+        border-radius: 0;
+        border: 0;
+        padding: 10px;
+      }
+
+      .fullscreen-title strong {
+        font-size: 21px;
+      }
+
+      .fullscreen-title span {
+        font-size: 12px;
+      }
+
+      .fullscreen-actions {
+        gap: 6px;
+      }
+
+      .fullscreen-actions button {
+        padding: 0 9px;
+      }
+
+      .fullscreen-canvas {
+        align-items: start;
+        padding: 0 0 6px;
+      }
+
+      .mock-app.fullscreen,
+      .mock-app.fullscreen.mobile {
+        width: 100%;
+        min-height: calc(100dvh - 148px);
+        border-radius: 14px;
+        padding: 14px;
+        font-size: 14px;
+      }
+
+      .mock-app.fullscreen.desktop {
+        width: 100%;
+        min-height: calc(100dvh - 148px);
+        grid-template-columns: 74px 1fr;
+      }
+
+      .fullscreen-links {
+        max-height: 86px;
+        overflow: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script type="application/json" id="oria-map-data">
+  {
+    "sections": [
+      {"id": "onboarding", "title": "Онбординг", "y": 92},
+      {"id": "quests", "title": "Квесты", "y": 488},
+      {"id": "inside", "title": "Внутри квеста", "y": 884},
+      {"id": "companion", "title": "Компаньон", "y": 1280},
+      {"id": "progress", "title": "Прогресс", "y": 1280},
+      {"id": "overview", "title": "Обзор", "y": 1676}
+    ],
+    "screens": [
+      {"id": "splash", "section": "onboarding", "name": "Splash", "platform": "mobile", "kind": "splash", "x": 60, "y": 140, "note": "Проверка сессии, бренд, автопереход."},
+      {"id": "onboarding", "section": "onboarding", "name": "Онбординг-карусель", "platform": "mobile", "kind": "map", "x": 320, "y": 140, "note": "Три слайда про цель, квест и компаньона."},
+      {"id": "auth", "section": "onboarding", "name": "Регистрация / Вход", "platform": "mobile", "kind": "form", "x": 580, "y": 140, "note": "Email, пароль, Google, Apple, Telegram."},
+      {"id": "firstQuest", "section": "onboarding", "name": "Первый квест", "platform": "mobile", "kind": "goal", "x": 840, "y": 140, "note": "Первый aha-момент после регистрации."},
+
+      {"id": "questsHome", "section": "quests", "name": "Квесты", "platform": "mobile", "kind": "questList", "x": 60, "y": 536, "note": "Главный хаб с двумя активными квестами."},
+      {"id": "goalInput", "section": "quests", "name": "Ввод цели", "platform": "mobile", "kind": "goal", "x": 320, "y": 536, "note": "Цель, подсказки, уровень, построить квест."},
+      {"id": "generation", "section": "quests", "name": "Генерация", "platform": "mobile", "kind": "loading", "x": 580, "y": 536, "note": "Предсказуемая загрузка и статусы."},
+      {"id": "review", "section": "quests", "name": "Проверка квеста", "platform": "mobile", "kind": "review", "x": 840, "y": 536, "note": "Арки, шаги, принять или перегенерировать."},
+      {"id": "questsDesktop", "section": "quests", "name": "Квесты", "platform": "desktop", "kind": "desktopHome", "x": 1160, "y": 556, "note": "1440px: сайдбар вместо таб-бара."},
+
+      {"id": "questMap", "section": "inside", "name": "Карта квеста", "platform": "mobile", "kind": "map", "x": 60, "y": 932, "note": "Схематичная ветка: арки, шаги, босс."},
+      {"id": "step", "section": "inside", "name": "Экран шага", "platform": "mobile", "kind": "article", "x": 320, "y": 932, "note": "Маленькая задача и отметка выполнения."},
+      {"id": "test", "section": "inside", "name": "Тест по арке", "platform": "mobile", "kind": "quiz", "x": 580, "y": 932, "note": "Мини-босс: вопрос и варианты."},
+      {"id": "results", "section": "inside", "name": "Результаты теста", "platform": "mobile", "kind": "score", "x": 840, "y": 932, "note": "Счёт, XP, разбор ошибок."},
+      {"id": "levelUp", "section": "inside", "name": "Левел-ап", "platform": "mobile", "kind": "level", "x": 1100, "y": 932, "note": "Модальный reward с кольцом роста."},
+      {"id": "finish", "section": "inside", "name": "Завершение квеста", "platform": "mobile", "kind": "finish", "x": 1360, "y": 932, "note": "Финальная сводка мастер-квеста."},
+      {"id": "questMapDesktop", "section": "inside", "name": "Карта квеста", "platform": "desktop", "kind": "desktopMap", "x": 1680, "y": 952, "note": "1440px: карта с широким холстом."},
+
+      {"id": "companion", "section": "companion", "name": "Компаньон", "platform": "mobile", "kind": "chat", "x": 60, "y": 1328, "note": "Контекст, готовый диалог, быстрые действия."},
+
+      {"id": "progress", "section": "progress", "name": "Прогресс", "platform": "mobile", "kind": "progress", "x": 380, "y": 1328, "note": "Маскот, уровень, стрик, статистика."},
+      {"id": "settings", "section": "progress", "name": "Настройки", "platform": "mobile", "kind": "settings", "x": 640, "y": 1328, "note": "Аккаунт, уведомления, тема, язык, выход."},
+      {"id": "mascotCustom", "section": "progress", "name": "Кастомизация маскота", "platform": "mobile", "kind": "mascot", "x": 900, "y": 1328, "note": "Превью и скины, часть за Pro."},
+      {"id": "paywall", "section": "progress", "name": "Подписка", "platform": "mobile", "kind": "paywall", "x": 1160, "y": 1328, "note": "Модальный пейволл из разных мест."},
+      {"id": "progressDesktop", "section": "progress", "name": "Прогресс", "platform": "desktop", "kind": "desktopProgress", "x": 1480, "y": 1348, "note": "1440px: сайдбар и широкая статистика."},
+
+      {"id": "overview", "section": "overview", "name": "Обзор", "platform": "mobile", "kind": "overview", "x": 60, "y": 1724, "note": "Поиск и карточки шаблонов."},
+      {"id": "templateDetails", "section": "overview", "name": "Детали шаблона", "platform": "mobile", "kind": "template", "x": 320, "y": 1724, "note": "Превью арок и старт квеста."}
+    ],
+    "transitions": [
+      {"from": "splash", "to": "questsHome", "label": "есть сессия", "type": "auto"},
+      {"from": "splash", "to": "onboarding", "label": "нет сессии", "type": "auto"},
+      {"from": "onboarding", "to": "auth", "label": "пропустить / конец", "type": "primary"},
+      {"from": "auth", "to": "firstQuest", "label": "новый пользователь", "type": "primary"},
+      {"from": "auth", "to": "questsHome", "label": "существующий", "type": "primary"},
+      {"from": "firstQuest", "to": "generation", "label": "построить", "type": "primary"},
+
+      {"from": "questsHome", "to": "questMap", "label": "тап по квесту", "type": "primary"},
+      {"from": "questsHome", "to": "goalInput", "label": "новый квест", "type": "primary"},
+      {"from": "questsHome", "to": "companion", "label": "таб", "type": "tab"},
+      {"from": "questsHome", "to": "progress", "label": "таб", "type": "tab"},
+      {"from": "questsHome", "to": "overview", "label": "таб", "type": "tab"},
+      {"from": "goalInput", "to": "generation", "label": "построить", "type": "primary"},
+      {"from": "goalInput", "to": "paywall", "label": "лимит квестов", "type": "limit"},
+      {"from": "generation", "to": "review", "label": "авто", "type": "auto"},
+      {"from": "review", "to": "questMap", "label": "начать", "type": "primary"},
+      {"from": "review", "to": "generation", "label": "перегенерировать", "type": "secondary"},
+      {"from": "questsDesktop", "to": "questMapDesktop", "label": "тап по квесту", "type": "desktop"},
+      {"from": "questsDesktop", "to": "goalInput", "label": "новый квест", "type": "desktop"},
+
+      {"from": "questMap", "to": "step", "label": "тап по шагу", "type": "primary"},
+      {"from": "questMap", "to": "test", "label": "тап по боссу", "type": "primary"},
+      {"from": "questMap", "to": "companion", "label": "обсудить", "type": "primary"},
+      {"from": "questMap", "to": "questsHome", "label": "назад", "type": "secondary"},
+      {"from": "questMap", "to": "finish", "label": "последняя арка", "type": "secondary"},
+      {"from": "step", "to": "questMap", "label": "выполнено / назад", "type": "primary"},
+      {"from": "step", "to": "companion", "label": "спросить", "type": "secondary"},
+      {"from": "test", "to": "results", "label": "завершить", "type": "primary"},
+      {"from": "results", "to": "levelUp", "label": "успех", "type": "primary"},
+      {"from": "results", "to": "test", "label": "провал", "type": "secondary"},
+      {"from": "levelUp", "to": "questMap", "label": "продолжить", "type": "primary"},
+      {"from": "finish", "to": "questsHome", "label": "в квесты", "type": "primary"},
+      {"from": "questMapDesktop", "to": "companion", "label": "обсудить", "type": "desktop"},
+      {"from": "questMapDesktop", "to": "questsDesktop", "label": "назад", "type": "desktop"},
+
+      {"from": "companion", "to": "questsHome", "label": "таб", "type": "tab"},
+      {"from": "companion", "to": "progress", "label": "таб", "type": "tab"},
+      {"from": "companion", "to": "overview", "label": "таб", "type": "tab"},
+      {"from": "companion", "to": "paywall", "label": "лимит сообщений", "type": "limit"},
+
+      {"from": "progress", "to": "settings", "label": "настройки", "type": "primary"},
+      {"from": "progress", "to": "mascotCustom", "label": "тап по маскоту", "type": "primary"},
+      {"from": "progress", "to": "paywall", "label": "апгрейд", "type": "limit"},
+      {"from": "progress", "to": "questsHome", "label": "таб", "type": "tab"},
+      {"from": "progress", "to": "companion", "label": "таб", "type": "tab"},
+      {"from": "progress", "to": "overview", "label": "таб", "type": "tab"},
+      {"from": "settings", "to": "progress", "label": "назад", "type": "secondary"},
+      {"from": "settings", "to": "auth", "label": "выйти", "type": "secondary"},
+      {"from": "mascotCustom", "to": "progress", "label": "назад", "type": "secondary"},
+      {"from": "mascotCustom", "to": "paywall", "label": "платный скин", "type": "limit"},
+      {"from": "paywall", "to": "questsHome", "label": "закрыть", "type": "secondary"},
+      {"from": "progressDesktop", "to": "settings", "label": "настройки", "type": "desktop"},
+
+      {"from": "overview", "to": "templateDetails", "label": "тап по шаблону", "type": "primary"},
+      {"from": "overview", "to": "questsHome", "label": "таб", "type": "tab"},
+      {"from": "overview", "to": "companion", "label": "таб", "type": "tab"},
+      {"from": "overview", "to": "progress", "label": "таб", "type": "tab"},
+      {"from": "templateDetails", "to": "questMap", "label": "начать квест", "type": "primary"},
+      {"from": "templateDetails", "to": "overview", "label": "назад", "type": "secondary"}
+    ]
+  }
+  </script>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="title-block">
+        <h1>ORIA 2.0 — карта экранов и переходов</h1>
+        <p>Схематичная интерактивная навигация по мобильным и десктопным фреймам. Клик по экрану подсвечивает входящие и исходящие переходы; клик по стрелке показывает конкретное действие.</p>
+      </div>
+      <div class="stats" aria-label="Сводка карты">
+        <div class="stat"><b id="screenCount">24</b><span>экрана</span></div>
+        <div class="stat"><b id="transitionCount">0</b><span>переходов</span></div>
+        <div class="stat"><b>3</b><span>desktop версии</span></div>
+      </div>
+      <div class="controls" aria-label="Управление картой">
+        <select id="sectionFilter" aria-label="Фильтр раздела">
+          <option value="all">Все разделы</option>
+        </select>
+        <select id="transitionFilter" aria-label="Фильтр переходов">
+          <option value="all">Все переходы</option>
+          <option value="primary">Основной путь</option>
+          <option value="tab">Табы</option>
+          <option value="limit">Лимиты / paywall</option>
+          <option value="desktop">Desktop</option>
+        </select>
+        <input id="search" type="search" placeholder="Найти экран" aria-label="Найти экран" />
+        <button id="showLabels" type="button" aria-pressed="true">Подписи стрелок</button>
+        <span class="control-spacer"></span>
+        <button id="zoomOut" type="button">−</button>
+        <button id="zoomReset" type="button">100%</button>
+        <button id="zoomIn" type="button">+</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="board-shell" id="boardShell" aria-label="Интерактивный холст карты экранов">
+        <div class="board" id="board">
+          <svg id="edges" width="2300" height="2240" role="img" aria-label="Стрелки переходов между экранами">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#5B7A5B"></path>
+              </marker>
+            </defs>
+          </svg>
+          <div id="lanes"></div>
+          <div id="screens"></div>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="Инспектор выбранного экрана">
+        <div class="panel" id="detail">
+          <h2>Выбери экран</h2>
+          <p>Кликни карточку или стрелку на карте. Здесь появятся назначение экрана и список переходов.</p>
+          <div class="detail-meta">
+            <span class="pill">зелёные — основные</span>
+            <span class="pill limit">лимиты</span>
+            <span class="pill desktop">desktop</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Легенда</h3>
+          <div class="legend">
+            <div class="legend-row"><span class="legend-line"></span>Основной переход по действию</div>
+            <div class="legend-row"><span class="legend-line tab"></span>Переключение таба</div>
+            <div class="legend-row"><span class="legend-line limit"></span>Лимит или платный сценарий</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Быстрый путь демо</h3>
+          <div class="transition-list" id="demoPath"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="fullscreen-viewer" id="fullscreenViewer" hidden aria-hidden="true">
+    <section class="fullscreen-dialog" role="dialog" aria-modal="true" aria-labelledby="fullscreenTitle">
+      <header class="fullscreen-top">
+        <div class="fullscreen-title">
+          <strong id="fullscreenTitle">Экран ORIA</strong>
+          <span id="fullscreenSubtitle">Интерактивный полноэкранный режим</span>
+        </div>
+        <div class="fullscreen-actions">
+          <button id="fullscreenPrev" type="button" aria-label="Предыдущий экран">←</button>
+          <button id="fullscreenNext" type="button" aria-label="Следующий экран">→</button>
+          <button id="fullscreenClose" type="button" class="primary" aria-label="Закрыть полноэкранный режим">Закрыть</button>
+        </div>
+      </header>
+      <div class="fullscreen-canvas" id="fullscreenCanvas"></div>
+      <footer class="fullscreen-links" id="fullscreenLinks"></footer>
+    </section>
+  </div>
+
+  <script>
+    const data = JSON.parse(document.getElementById("oria-map-data").textContent);
+    window.ORIA_MAP_DATA = data;
+
+    const sectionNames = Object.fromEntries(data.sections.map((section) => [section.id, section.title]));
+    const screenById = Object.fromEntries(data.screens.map((screen) => [screen.id, screen]));
+    const board = document.getElementById("board");
+    const boardShell = document.getElementById("boardShell");
+    const lanesLayer = document.getElementById("lanes");
+    const screensLayer = document.getElementById("screens");
+    const edgesSvg = document.getElementById("edges");
+    const sectionFilter = document.getElementById("sectionFilter");
+    const transitionFilter = document.getElementById("transitionFilter");
+    const searchInput = document.getElementById("search");
+    const detail = document.getElementById("detail");
+    const demoPath = document.getElementById("demoPath");
+    const labelToggle = document.getElementById("showLabels");
+    const fullscreenViewer = document.getElementById("fullscreenViewer");
+    const fullscreenCanvas = document.getElementById("fullscreenCanvas");
+    const fullscreenLinks = document.getElementById("fullscreenLinks");
+    const fullscreenTitle = document.getElementById("fullscreenTitle");
+    const fullscreenSubtitle = document.getElementById("fullscreenSubtitle");
+    const fullscreenPrev = document.getElementById("fullscreenPrev");
+    const fullscreenNext = document.getElementById("fullscreenNext");
+    const fullscreenClose = document.getElementById("fullscreenClose");
+
+    let selectedScreenId = null;
+    let selectedTransitionIndex = null;
+    let fullscreenScreenId = null;
+    let zoom = 1;
+    let labelsVisible = true;
+
+    document.getElementById("screenCount").textContent = data.screens.length;
+    document.getElementById("transitionCount").textContent = data.transitions.length;
+
+    for (const section of data.sections) {
+      const option = document.createElement("option");
+      option.value = section.id;
+      option.textContent = section.title;
+      sectionFilter.appendChild(option);
+    }
+
+    function dims(screen) {
+      return screen.platform === "desktop"
+        ? { w: 300, h: 226 }
+        : { w: 190, h: 322 };
+    }
+
+    function center(screen) {
+      const d = dims(screen);
+      return { x: screen.x + d.w / 2, y: screen.y + d.h / 2 };
+    }
+
+    function edgeEndpoints(from, to) {
+      const a = center(from);
+      const b = center(to);
+      const da = dims(from);
+      const db = dims(to);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const horizontal = Math.abs(dx) > Math.abs(dy);
+      if (horizontal) {
+        return {
+          sx: dx >= 0 ? from.x + da.w : from.x,
+          sy: a.y,
+          tx: dx >= 0 ? to.x : to.x + db.w,
+          ty: b.y
+        };
+      }
+      return {
+        sx: a.x,
+        sy: dy >= 0 ? from.y + da.h : from.y,
+        tx: b.x,
+        ty: dy >= 0 ? to.y : to.y + db.h
+      };
+    }
+
+    function pathFor(from, to, offset = 0) {
+      const p = edgeEndpoints(from, to);
+      const baseDx = p.tx - p.sx;
+      const baseDy = p.ty - p.sy;
+      const length = Math.hypot(baseDx, baseDy) || 1;
+      const ox = (-baseDy / length) * offset;
+      const oy = (baseDx / length) * offset;
+      p.sx += ox;
+      p.sy += oy;
+      p.tx += ox;
+      p.ty += oy;
+      const dx = p.tx - p.sx;
+      const dy = p.ty - p.sy;
+      const bend = Math.max(80, Math.min(260, Math.abs(dx) * 0.45 + Math.abs(dy) * 0.18));
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const c1x = p.sx + Math.sign(dx || 1) * bend;
+        const c2x = p.tx - Math.sign(dx || 1) * bend;
+        return {
+          d: `M ${p.sx} ${p.sy} C ${c1x} ${p.sy}, ${c2x} ${p.ty}, ${p.tx} ${p.ty}`,
+          mx: (p.sx + p.tx) / 2,
+          my: (p.sy + p.ty) / 2 - 10
+        };
+      }
+      const c1y = p.sy + Math.sign(dy || 1) * bend;
+      const c2y = p.ty - Math.sign(dy || 1) * bend;
+      return {
+        d: `M ${p.sx} ${p.sy} C ${p.sx} ${c1y}, ${p.tx} ${c2y}, ${p.tx} ${p.ty}`,
+        mx: (p.sx + p.tx) / 2 + 16,
+        my: (p.sy + p.ty) / 2
+      };
+    }
+
+    const mockData = {
+      user: { name: "Аня", level: 7, xp: 4380, streak: 12, focus: "Системное мышление" },
+      quests: [
+        { title: "Системный дизайн", arc: "Арка 2 из 4", progress: 62, next: "Кеширование и очереди", tag: "hard" },
+        { title: "Финансовая грамотность", arc: "Арка 1 из 3", progress: 34, next: "Фондовый риск", tag: "easy" }
+      ],
+      templates: [
+        { title: "Запуск продукта", time: "14 дней", level: "middle" },
+        { title: "SQL с нуля", time: "10 дней", level: "easy" },
+        { title: "История искусства", time: "7 дней", level: "easy" }
+      ],
+      arcs: ["Фундамент", "Практика", "Босс", "Итог"],
+      chatSeed: [
+        { role: "companion", text: "Я вижу, что ты застряла на очередях. Разберём через бытовую аналогию?" },
+        { role: "user", text: "Да, только коротко." }
+      ]
+    };
+
+    const uiState = {
+      onboarding: { slide: 0 },
+      auth: { email: "anya@oria.app", mode: "login" },
+      firstQuest: { goal: "Понять основы инвестиций", difficulty: "easy" },
+      goalInput: { goal: "Разобраться в системном дизайне", difficulty: "middle" },
+      generation: { step: 2 },
+      review: { accepted: false },
+      questMap: { focus: "cache" },
+      questMapDesktop: { focus: "boss" },
+      step: { done: false, note: "Сравнить Redis и CDN на примере новостей." },
+      test: { answer: null, submitted: false },
+      results: { showDetails: false },
+      levelUp: { claimed: false },
+      finish: { shared: false },
+      companion: { draft: "Объясни очереди на примере кафе", messages: [...mockData.chatSeed] },
+      progress: { range: "week" },
+      progressDesktop: { range: "month" },
+      settings: { theme: "light", reminders: true },
+      mascotCustom: { skin: "moss" },
+      paywall: { annual: true, subscribed: false },
+      overview: { overviewQuery: "продукт" },
+      templateDetails: { started: false }
+    };
+
+    function stateFor(id) {
+      if (!uiState[id]) uiState[id] = {};
+      return uiState[id];
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    function tabButton(id, label, active) {
+      return `<button class="mock-tab ${active === id ? "is-active" : ""}" type="button" data-go="${id}" data-ui-action="visit-tab"><i></i><span>${label}</span></button>`;
+    }
+
+    function mockNav(active = "questsHome", platform = "mobile") {
+      const labels = platform === "desktop"
+        ? [["questsDesktop", "Квесты"], ["companion", "Чат"], ["progressDesktop", "Рост"], ["overview", "Обзор"]]
+        : [["questsHome", "Квесты"], ["companion", "Чат"], ["progress", "Рост"], ["overview", "Обзор"]];
+      return `<nav class="mock-bottom">${labels.map(([id, label]) => tabButton(id, label, active)).join("")}</nav>`;
+    }
+
+    function shell(screen, body, options = {}) {
+      const active = options.activeTab || (screen.section === "progress" ? "progress" : screen.section === "companion" ? "companion" : screen.section === "overview" ? "overview" : "questsHome");
+      const top = `
+        <div class="mock-top">
+          <div class="mock-title"><strong>${esc(options.title || screen.name)}</strong><span>${esc(options.subtitle || screen.note)}</span></div>
+          <span class="mock-chip">${esc(options.chip || mockData.user.name)}</span>
+        </div>`;
+      if (screen.platform === "desktop") {
+        return `
+          <div class="mock-app ${options.mode || "card"} desktop" data-screen-id="${screen.id}">
+            ${mockNav(active, "desktop")}
+            <section class="mock-screen">${top}<div class="mock-body">${body}</div></section>
+          </div>`;
+      }
+      return `
+        <div class="mock-app ${options.mode || "card"} mobile" data-screen-id="${screen.id}">
+          ${top}
+          <div class="mock-body">${body}</div>
+          ${options.nav === false ? "" : mockNav(active, "mobile")}
+        </div>`;
+    }
+
+    function questCard(quest, index) {
+      return `
+        <button class="mock-card" type="button" data-go="questMap" data-ui-action="open-quest" data-value="${index}">
+          <div class="mock-row between"><span class="mock-main">${esc(quest.title)}</span><span class="mock-chip">${quest.progress}%</span></div>
+          <span class="mock-muted">${esc(quest.arc)} · дальше: ${esc(quest.next)}</span>
+          <div class="mock-progress" style="--value:${quest.progress}%"><i></i></div>
+        </button>`;
+    }
+
+    function renderBranch(screenId) {
+      const state = stateFor(screenId);
+      const points = [
+        ["intro", 8, 24, "done"],
+        ["api", 36, 66, "done"],
+        ["cache", 70, 32, ""],
+        ["queue", 104, 54, ""],
+        ["boss", 96, 88, "bloom"]
+      ];
+      return `
+        <div class="mock-branch">
+          <svg viewBox="0 0 132 112" aria-hidden="true">
+            <path d="M 16 31 C 38 79, 76 20, 120 58" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"></path>
+            <path d="M 76 42 C 86 70, 98 84, 108 100" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".52"></path>
+          </svg>
+          ${points.map(([id, x, y, cls]) => `<button class="mock-node ${cls} ${state.focus === id ? "is-active" : ""}" type="button" style="left:${x}%;top:${y}%" data-ui-action="focus-node" data-value="${id}" title="${id}"></button>`).join("")}
+        </div>
+        <div class="mock-row">
+          <button class="mock-btn primary" type="button" data-go="step" data-ui-action="open-step">Шаг</button>
+          <button class="mock-btn bloom" type="button" data-go="test" data-ui-action="open-boss">Босс</button>
+          <button class="mock-btn" type="button" data-go="companion" data-ui-action="ask-map">Обсудить</button>
+        </div>`;
+    }
+
+    function renderLiveScreen(screen, mode = "card") {
+      const state = stateFor(screen.id);
+      const live = mode === "live";
+      const slides = [
+        ["Цель превращается в квест", "ORIA дробит большую тему на короткие арки."],
+        ["Рост виден на карте", "Каждый шаг двигает ветку и открывает босса."],
+        ["Компаньон рядом", "Можно спросить, сократить или попросить пример."]
+      ];
+      let body = "";
+      let options = { mode };
+
+      switch (screen.id) {
+        case "splash":
+          body = `
+            <div class="mock-card">
+              <div class="mock-row"><span class="mock-mascot"></span><div><span class="mock-main">Добро пожаловать обратно</span><div class="mock-muted">Сессия Ани найдена</div></div></div>
+              <button class="mock-btn primary" type="button" data-go="questsHome" data-ui-action="resume-session">Продолжить</button>
+              <button class="mock-btn" type="button" data-go="onboarding" data-ui-action="restart-onboarding">Смотреть тур</button>
+            </div>`;
+          options = { ...options, title: "ORIA", subtitle: "живой старт приложения", nav: false, chip: "2.0" };
+          break;
+        case "onboarding": {
+          const slide = slides[state.slide] || slides[0];
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">${esc(slide[0])}</span>
+              <span class="mock-muted">${esc(slide[1])}</span>
+              <div class="mock-progress" style="--value:${((state.slide + 1) / slides.length) * 100}%"><i></i></div>
+              <div class="mock-row">
+                <button class="mock-btn" type="button" data-ui-action="prev-slide">Назад</button>
+                <button class="mock-btn primary" type="button" data-ui-action="next-slide">Дальше</button>
+                <button class="mock-btn ghost" type="button" data-go="auth" data-ui-action="skip-onboarding">Войти</button>
+              </div>
+            </div>`;
+          options = { ...options, title: "Онбординг", subtitle: `${state.slide + 1} из ${slides.length}`, nav: false };
+          break;
+        }
+        case "auth":
+          body = `
+            <div class="mock-card">
+              <div class="mock-row">
+                <button class="mock-btn ${state.mode === "login" ? "is-active" : ""}" type="button" data-ui-action="set-mode" data-value="login">Вход</button>
+                <button class="mock-btn ${state.mode === "signup" ? "is-active" : ""}" type="button" data-ui-action="set-mode" data-value="signup">Регистрация</button>
+              </div>
+              <input class="mock-input" data-ui-input="email" value="${esc(state.email)}" aria-label="Email">
+              <button class="mock-btn primary" type="button" data-go="${state.mode === "signup" ? "firstQuest" : "questsHome"}" data-ui-action="submit-auth">${state.mode === "signup" ? "Создать аккаунт" : "Войти"}</button>
+              <button class="mock-btn" type="button" data-go="questsHome" data-ui-action="oauth">Google</button>
+            </div>`;
+          options = { ...options, title: "Аккаунт", subtitle: "синтетический пользователь", nav: false };
+          break;
+        case "firstQuest":
+        case "goalInput":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Что хочешь освоить?</span>
+              <input class="mock-input" data-ui-input="goal" value="${esc(state.goal)}" aria-label="Цель">
+              <div class="mock-row">
+                ${["easy", "middle", "hard"].map((level) => `<button class="mock-btn ${state.difficulty === level ? "is-active" : ""}" type="button" data-ui-action="set-difficulty" data-value="${level}">${level}</button>`).join("")}
+              </div>
+              <button class="mock-btn primary" type="button" data-go="generation" data-ui-action="build-goal">Построить квест</button>
+              <button class="mock-btn" type="button" data-go="paywall" data-ui-action="hit-limit">Проверить Pro</button>
+            </div>`;
+          options = { ...options, title: "Новый квест", subtitle: "цель, уровень и генерация", nav: screen.id === "goalInput" };
+          break;
+        case "generation":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Собираю карту роста</span>
+              <span class="mock-muted">Шаг ${state.step} из 3 · подбираю задания и босса</span>
+              <div class="mock-progress" style="--value:${state.step * 33}%"><i></i></div>
+              <button class="mock-btn" type="button" data-ui-action="advance-generate">Прокрутить статус</button>
+              <button class="mock-btn primary" type="button" data-go="review" data-ui-action="finish-generation">Готово</button>
+            </div>`;
+          options = { ...options, title: "Генерация", subtitle: "ожидание без пустого экрана", nav: false };
+          break;
+        case "review":
+          body = `
+            <div class="mock-list">
+              ${mockData.arcs.map((arc, index) => `<div class="mock-card"><div class="mock-row between"><span class="mock-main">${arc}</span><span class="mock-chip">${index + 2} шага</span></div><span class="mock-muted">${index === 2 ? "Мини-босс: проектирование API" : "Практика и короткий разбор"}</span></div>`).join("")}
+              <div class="mock-row">
+                <button class="mock-btn primary" type="button" data-go="questMap" data-ui-action="accept-review">Начать</button>
+                <button class="mock-btn" type="button" data-go="generation" data-ui-action="regenerate">Пересобрать</button>
+              </div>
+            </div>`;
+          options = { ...options, title: "План квеста", subtitle: state.accepted ? "принят командой" : "можно принять или пересобрать" };
+          break;
+        case "questsHome":
+          body = `
+            ${mockData.quests.map(questCard).join("")}
+            <button class="mock-btn primary" type="button" data-go="goalInput" data-ui-action="new-quest">Новый квест</button>`;
+          options = { ...options, title: "Квесты", subtitle: "активные маршруты обучения", activeTab: "questsHome" };
+          break;
+        case "questsDesktop":
+          body = `
+            <div class="mock-row">
+              <div class="mock-card" style="flex:1"><span class="mock-main">Сегодня</span><span class="mock-muted">2 шага · 25 минут</span></div>
+              <div class="mock-card" style="flex:1"><span class="mock-main">Фокус</span><span class="mock-muted">${mockData.user.focus}</span></div>
+            </div>
+            <div class="mock-list">${mockData.quests.map(questCard).join("")}</div>`;
+          options = { ...options, title: "Desktop квесты", subtitle: "широкий хаб с сайдбаром", activeTab: "questsDesktop" };
+          break;
+        case "questMap":
+        case "questMapDesktop":
+          body = renderBranch(screen.id);
+          options = { ...options, title: "Системный дизайн", subtitle: `Фокус: ${esc(state.focus)}`, activeTab: screen.platform === "desktop" ? "questMapDesktop" : "questsHome" };
+          break;
+        case "step":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Шаг: кеш против очереди</span>
+              <span class="mock-muted">Прочитай пример и сформулируй, где нужна очередь.</span>
+              <input class="mock-input" data-ui-input="note" value="${esc(state.note)}" aria-label="Ответ шага">
+              <button class="mock-choice ${state.done ? "is-correct" : ""}" type="button" data-ui-action="toggle-step-done">${state.done ? "Выполнено" : "Отметить выполненным"}</button>
+              <div class="mock-row">
+                <button class="mock-btn primary" type="button" data-go="questMap" data-ui-action="complete-step">На карту</button>
+                <button class="mock-btn" type="button" data-go="companion" data-ui-action="ask-step">Спросить</button>
+              </div>
+            </div>`;
+          options = { ...options, title: "Учебный шаг", subtitle: "маленькое действие вместо длинной лекции" };
+          break;
+        case "test": {
+          const choices = [["cache", "Кеш снижает нагрузку на повторных запросах"], ["queue", "Очередь мгновенно ускоряет чтение"], ["cdn", "CDN хранит только пароли"]];
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Что верно про кеш?</span>
+              ${choices.map(([id, text]) => `<button class="mock-choice ${state.answer === id ? "is-active" : ""} ${state.submitted && id === "cache" ? "is-correct" : ""} ${state.submitted && state.answer === id && id !== "cache" ? "is-wrong" : ""}" type="button" data-ui-action="choose-answer" data-value="${id}">${text}</button>`).join("")}
+              <div class="mock-row">
+                <button class="mock-btn primary" type="button" data-ui-action="submit-quiz">Проверить</button>
+                <button class="mock-btn" type="button" data-ui-action="reset-quiz">Сброс</button>
+                <button class="mock-btn" type="button" data-go="results" data-ui-action="finish-quiz">Итог</button>
+              </div>
+            </div>`;
+          options = { ...options, title: "Мини-босс", subtitle: state.submitted ? (state.answer === "cache" ? "ответ верный" : "нужен повтор") : "выбери один вариант" };
+          break;
+        }
+        case "results":
+          body = `
+            <div class="mock-card">
+              <div class="mock-row between"><span class="mock-main">82%</span><span class="mock-chip">+140 XP</span></div>
+              <div class="mock-progress" style="--value:82%"><i></i></div>
+              <button class="mock-btn" type="button" data-ui-action="toggle-details">${state.showDetails ? "Скрыть ошибки" : "Показать разбор"}</button>
+              ${state.showDetails ? `<div class="mock-muted">Ошибки: перепутаны кеш и очередь. Совет: смотри на запись против чтения.</div>` : ""}
+              <button class="mock-btn primary" type="button" data-go="levelUp" data-ui-action="open-level">Продолжить</button>
+            </div>`;
+          options = { ...options, title: "Результат", subtitle: "счёт, XP и объяснение ошибок" };
+          break;
+        case "levelUp":
+          body = `
+            <div class="mock-card">
+              <div class="mock-row"><span class="mock-mascot"></span><div><span class="mock-main">Уровень 8</span><span class="mock-muted">${state.claimed ? "Награда получена" : "Открыт скин Moss"}</span></div></div>
+              <button class="mock-btn bloom" type="button" data-ui-action="claim-reward">${state.claimed ? "Получено" : "Забрать"}</button>
+              <button class="mock-btn primary" type="button" data-go="questMap" data-ui-action="continue-after-level">Продолжить</button>
+            </div>`;
+          options = { ...options, title: "Левел-ап", subtitle: "короткая награда без отдельного экрана" };
+          break;
+        case "finish":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Квест завершён</span>
+              <span class="mock-muted">12 шагов · 3 босса · 7 заметок</span>
+              <div class="mock-metric-grid"><div class="mock-metric"><strong>91%</strong><span>мастерство</span></div><div class="mock-metric"><strong>4ч</strong><span>практики</span></div></div>
+              <button class="mock-btn" type="button" data-ui-action="toggle-share">${state.shared ? "Ссылка создана" : "Поделиться"}</button>
+              <button class="mock-btn primary" type="button" data-go="questsHome" data-ui-action="finish-home">В квесты</button>
+            </div>`;
+          options = { ...options, title: "Финиш", subtitle: "сводка и следующий маршрут" };
+          break;
+        case "companion": {
+          const messages = state.messages || mockData.chatSeed;
+          body = `
+            <div class="mock-list">${messages.slice(-3).map((message) => `<div class="mock-bubble ${message.role === "user" ? "user" : ""}">${esc(message.text)}</div>`).join("")}</div>
+            <div class="mock-card">
+              <input class="mock-input" data-ui-input="draft" value="${esc(state.draft)}" aria-label="Сообщение компаньону">
+              <div class="mock-row">
+                <button class="mock-btn primary" type="button" data-ui-action="send-message">Отправить</button>
+                <button class="mock-btn" type="button" data-ui-action="quick-chat" data-value="Сделай пример короче">Короче</button>
+              </div>
+            </div>`;
+          options = { ...options, title: "Компаньон", subtitle: "контекстный диалог по текущему шагу", activeTab: "companion" };
+          break;
+        }
+        case "progress":
+        case "progressDesktop":
+          body = `
+            <div class="mock-card">
+              <div class="mock-row"><button class="mock-mascot" type="button" data-go="mascotCustom" data-ui-action="open-mascot" aria-label="Открыть маскота"></button><div><span class="mock-main">${mockData.user.name}, уровень ${mockData.user.level}</span><span class="mock-muted">${mockData.user.xp} XP · стрик ${mockData.user.streak} дней</span></div></div>
+              <div class="mock-row">${["week", "month", "all"].map((range) => `<button class="mock-btn ${state.range === range ? "is-active" : ""}" type="button" data-ui-action="set-range" data-value="${range}">${range}</button>`).join("")}</div>
+            </div>
+            <div class="mock-metric-grid"><div class="mock-metric"><strong>18</strong><span>шагов</span></div><div class="mock-metric"><strong>5</strong><span>боссов</span></div><div class="mock-metric"><strong>73%</strong><span>ритм</span></div><div class="mock-metric"><strong>2</strong><span>темы</span></div></div>
+            <button class="mock-btn" type="button" data-go="settings" data-ui-action="open-settings">Настройки</button>`;
+          options = { ...options, title: "Прогресс", subtitle: `период: ${state.range}`, activeTab: screen.platform === "desktop" ? "progressDesktop" : "progress" };
+          break;
+        case "settings":
+          body = `
+            <div class="mock-list">
+              <div class="mock-card"><div class="mock-row between"><span class="mock-main">Уведомления</span><button class="mock-btn ${state.reminders ? "is-active" : ""}" type="button" data-ui-action="toggle-reminders">${state.reminders ? "Вкл" : "Выкл"}</button></div></div>
+              <div class="mock-card"><span class="mock-main">Тема</span><div class="mock-row">${["light", "dark"].map((theme) => `<button class="mock-btn ${state.theme === theme ? "is-active" : ""}" type="button" data-ui-action="set-theme" data-value="${theme}">${theme}</button>`).join("")}</div></div>
+              <button class="mock-btn" type="button" data-go="progress" data-ui-action="back-progress">Назад</button>
+              <button class="mock-btn" type="button" data-go="auth" data-ui-action="logout">Выйти</button>
+            </div>`;
+          options = { ...options, title: "Настройки", subtitle: "аккаунт, тема и уведомления", activeTab: "progress" };
+          break;
+        case "mascotCustom":
+          body = `
+            <div class="mock-card"><div class="mock-row"><span class="mock-mascot"></span><div><span class="mock-main">Опоссум ORIA</span><span class="mock-muted">геометрический placeholder</span></div></div></div>
+            <div class="mock-skins">${["moss", "bloom", "night"].map((skin) => `<button class="mock-skin ${state.skin === skin ? "is-active" : ""}" type="button" data-ui-action="set-skin" data-value="${skin}">${skin}</button>`).join("")}</div>
+            <button class="mock-btn primary" type="button" data-go="progress" data-ui-action="save-skin">Сохранить</button>
+            <button class="mock-btn" type="button" data-go="paywall" data-ui-action="premium-skin">Pro-скин</button>`;
+          options = { ...options, title: "Маскот", subtitle: `выбран: ${state.skin}`, activeTab: "progress" };
+          break;
+        case "paywall":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">${state.subscribed ? "Pro активирован" : "ORIA Pro"}</span>
+              <span class="mock-muted">Безлимитные квесты, сообщения и скины</span>
+              <button class="mock-choice ${state.annual ? "is-active" : ""}" type="button" data-ui-action="toggle-billing">Годовой · 3990 ₽</button>
+              <button class="mock-btn bloom" type="button" data-ui-action="subscribe">${state.subscribed ? "Активно" : "Оформить"}</button>
+              <button class="mock-btn" type="button" data-go="questsHome" data-ui-action="close-paywall">Закрыть</button>
+            </div>`;
+          options = { ...options, title: "Подписка", subtitle: "платные лимиты и апгрейд", nav: false };
+          break;
+        case "overview": {
+          const query = String(state.overviewQuery || "").toLowerCase();
+          const templates = mockData.templates.filter((template) => !query || template.title.toLowerCase().includes(query) || template.level.includes(query));
+          body = `
+            <input class="mock-input" data-ui-input="overviewQuery" value="${esc(state.overviewQuery)}" aria-label="Поиск шаблонов">
+            <div class="mock-list">
+              ${templates.map((template) => `<button class="mock-card" type="button" data-go="templateDetails" data-ui-action="open-template"><div class="mock-row between"><span class="mock-main">${esc(template.title)}</span><span class="mock-chip">${esc(template.time)}</span></div><span class="mock-muted">уровень: ${esc(template.level)}</span></button>`).join("") || `<div class="mock-card"><span class="mock-muted">Ничего не найдено</span></div>`}
+            </div>`;
+          options = { ...options, title: "Обзор", subtitle: "шаблоны и поиск", activeTab: "overview" };
+          break;
+        }
+        case "templateDetails":
+          body = `
+            <div class="mock-card">
+              <span class="mock-main">Запуск продукта</span>
+              <span class="mock-muted">4 арки: исследование, MVP, метрики, запуск</span>
+              <div class="mock-progress" style="--value:78%"><i></i></div>
+              <button class="mock-btn primary" type="button" data-go="questMap" data-ui-action="start-template">${state.started ? "Открыть квест" : "Начать квест"}</button>
+              <button class="mock-btn" type="button" data-go="overview" data-ui-action="back-overview">Назад</button>
+            </div>`;
+          options = { ...options, title: "Шаблон", subtitle: state.started ? "квест создан" : "готовый маршрут" };
+          break;
+        default:
+          body = `<div class="mock-card"><span class="mock-main">${esc(screen.name)}</span><span class="mock-muted">${esc(screen.note)}</span><button class="mock-btn primary" type="button" data-ui-action="generic-action">Действие</button></div>`;
+      }
+
+      return shell(screen, body, options);
+    }
+
+    function renderLanes() {
+      lanesLayer.innerHTML = "";
+      for (const section of data.sections) {
+        const lane = document.createElement("div");
+        lane.className = "lane";
+        lane.style.top = `${section.y}px`;
+        lane.innerHTML = `<span class="lane-label">${section.title}</span>`;
+        lanesLayer.appendChild(lane);
+      }
+    }
+
+    function renderScreens() {
+      screensLayer.innerHTML = "";
+      for (const screen of data.screens) {
+        const out = data.transitions.filter((transition) => transition.from === screen.id).length;
+        const incoming = data.transitions.filter((transition) => transition.to === screen.id).length;
+        const el = document.createElement("article");
+        el.className = `screen ${screen.platform === "desktop" ? "desktop" : "mobile"}`;
+        el.dataset.id = screen.id;
+        el.dataset.section = screen.section;
+        el.style.left = `${screen.x}px`;
+        el.style.top = `${screen.y}px`;
+        el.innerHTML = `
+          <div class="screen-top">
+            <div class="screen-title">
+              <strong>${screen.name}</strong>
+              <span>${sectionNames[screen.section]}</span>
+            </div>
+            <span class="badge">${screen.platform}</span>
+          </div>
+          <div class="preview">${renderLiveScreen(screen, "card")}</div>
+          <div class="screen-footer">
+            <span>${incoming} in · ${out} out</span>
+            <span class="degree" aria-label="${out} исходящих переходов">${Array.from({ length: Math.min(out, 5) }, () => "<i></i>").join("")}</span>
+          </div>
+        `;
+        el.addEventListener("click", (event) => {
+          if (event.target.closest("[data-ui-action], [data-go], [data-ui-input], button, input, select")) return;
+          openFullscreen(screen.id);
+        });
+        screensLayer.appendChild(el);
+      }
+    }
+
+    function renderEdges() {
+      [...edgesSvg.querySelectorAll(".edge")].forEach((edge) => edge.remove());
+      const pairGroups = new Map();
+      data.transitions.forEach((transition, index) => {
+        const key = [transition.from, transition.to].sort().join("::");
+        if (!pairGroups.has(key)) pairGroups.set(key, []);
+        pairGroups.get(key).push(index);
+      });
+      const pairOffsets = new Map();
+      pairGroups.forEach((indexes) => {
+        indexes.forEach((transitionIndex, order) => {
+          pairOffsets.set(transitionIndex, indexes.length > 1 ? (order - (indexes.length - 1) / 2) * 28 : 0);
+        });
+      });
+      data.transitions.forEach((transition, index) => {
+        const from = screenById[transition.from];
+        const to = screenById[transition.to];
+        const directionSign = transition.from < transition.to ? 1 : -1;
+        const p = pathFor(from, to, (pairOffsets.get(index) || 0) * directionSign);
+        const labelWidth = Math.max(84, Math.min(154, transition.label.length * 6 + 24));
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.classList.add("edge", `is-${transition.type}`);
+        g.dataset.index = index;
+        g.dataset.from = transition.from;
+        g.dataset.to = transition.to;
+        g.dataset.type = transition.type;
+        g.innerHTML = `
+          <path class="edge-hit" d="${p.d}"></path>
+          <path class="edge-line" d="${p.d}"></path>
+          <rect class="edge-label-bg" x="${p.mx - labelWidth / 2}" y="${p.my - 12}" width="${labelWidth}" height="20"></rect>
+          <text class="edge-label" x="${p.mx}" y="${p.my + 3}" text-anchor="middle">${transition.label}</text>
+          <circle class="edge-anchor" cx="${p.mx}" cy="${p.my}" r="10"></circle>
+        `;
+        g.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectTransition(index);
+        });
+        edgesSvg.appendChild(g);
+      });
+    }
+
+    function renderDemoPath() {
+      const pathIds = ["auth", "firstQuest", "generation", "review", "questMap", "step", "questMap", "test", "results", "levelUp", "questMap", "companion", "progress"];
+      demoPath.innerHTML = "";
+      for (const id of pathIds) {
+        const screen = screenById[id];
+        const button = document.createElement("button");
+        button.className = "transition-item";
+        button.type = "button";
+        button.innerHTML = `<strong>${screen.name}</strong><span>${sectionNames[screen.section]} · ${screen.platform}</span>`;
+        button.addEventListener("click", () => selectScreen(id, true));
+        demoPath.appendChild(button);
+      }
+    }
+
+    function typeLabel(type) {
+      return {
+        primary: "основной",
+        secondary: "вторичный",
+        tab: "таб",
+        limit: "лимит",
+        desktop: "desktop",
+        auto: "авто"
+      }[type] || type;
+    }
+
+    function updateInspectorForScreen(screenId) {
+      const screen = screenById[screenId];
+      const outgoing = data.transitions
+        .map((transition, index) => ({ ...transition, index }))
+        .filter((transition) => transition.from === screenId);
+      const incoming = data.transitions
+        .map((transition, index) => ({ ...transition, index }))
+        .filter((transition) => transition.to === screenId);
+      const transitionButton = (transition, dir) => {
+        const other = screenById[dir === "out" ? transition.to : transition.from];
+        return `
+          <button class="transition-item" type="button" data-transition="${transition.index}">
+            <strong>${dir === "out" ? "→" : "←"} ${other.name}</strong>
+            <span>${transition.label} · ${typeLabel(transition.type)}</span>
+          </button>
+        `;
+      };
+      detail.innerHTML = `
+        <h2>${screen.name}</h2>
+        <p>${screen.note}</p>
+        <div class="detail-meta">
+          <span class="pill ${screen.platform === "desktop" ? "desktop" : ""}">${screen.platform}</span>
+          <span class="pill">${sectionNames[screen.section]}</span>
+          <span class="pill">${incoming.length} входящих</span>
+          <span class="pill">${outgoing.length} исходящих</span>
+        </div>
+        <div class="live-preview">${renderLiveScreen(screen, "live")}</div>
+        <div class="transition-list">
+          <h3>Исходящие</h3>
+          ${outgoing.length ? outgoing.map((transition) => transitionButton(transition, "out")).join("") : "<p>Нет исходящих переходов.</p>"}
+          <h3>Входящие</h3>
+          ${incoming.length ? incoming.map((transition) => transitionButton(transition, "in")).join("") : "<p>Нет входящих переходов.</p>"}
+        </div>
+      `;
+      detail.querySelectorAll("[data-transition]").forEach((button) => {
+        button.addEventListener("click", () => selectTransition(Number(button.dataset.transition)));
+      });
+    }
+
+    function updateInspectorForTransition(index) {
+      const transition = data.transitions[index];
+      const from = screenById[transition.from];
+      const to = screenById[transition.to];
+      detail.innerHTML = `
+        <h2>${transition.label}</h2>
+        <p>${from.name} → ${to.name}</p>
+        <div class="detail-meta">
+          <span class="pill">${typeLabel(transition.type)}</span>
+          <span class="pill">${sectionNames[from.section]}</span>
+          <span class="pill">${from.platform} → ${to.platform}</span>
+        </div>
+        <div class="transition-list">
+          <button class="transition-item" type="button" data-screen="${from.id}">
+            <strong>Откуда: ${from.name}</strong>
+            <span>${from.note}</span>
+          </button>
+          <button class="transition-item" type="button" data-screen="${to.id}">
+            <strong>Куда: ${to.name}</strong>
+            <span>${to.note}</span>
+          </button>
+        </div>
+      `;
+      detail.querySelectorAll("[data-screen]").forEach((button) => {
+        button.addEventListener("click", () => selectScreen(button.dataset.screen, true));
+      });
+    }
+
+    function applyHighlight() {
+      const activeOut = new Set();
+      const activeIn = new Set();
+      if (selectedScreenId) {
+        data.transitions.forEach((transition, index) => {
+          if (transition.from === selectedScreenId) activeOut.add(index);
+          if (transition.to === selectedScreenId) activeIn.add(index);
+        });
+      }
+      if (selectedTransitionIndex !== null) {
+        activeOut.add(selectedTransitionIndex);
+      }
+
+      document.querySelectorAll(".screen").forEach((node) => {
+        const id = node.dataset.id;
+        node.classList.toggle("is-selected", id === selectedScreenId);
+        node.classList.toggle("is-target", selectedTransitionIndex !== null && data.transitions[selectedTransitionIndex]?.to === id);
+        const anySelected = selectedScreenId || selectedTransitionIndex !== null;
+        const t = selectedTransitionIndex !== null ? data.transitions[selectedTransitionIndex] : null;
+        const relevant = !anySelected || id === selectedScreenId || activeOut.size && [...activeOut].some((i) => data.transitions[i].to === id || data.transitions[i].from === id) || activeIn.size && [...activeIn].some((i) => data.transitions[i].to === id || data.transitions[i].from === id) || (t && (t.from === id || t.to === id));
+        node.classList.toggle("is-muted", Boolean(anySelected && !relevant));
+      });
+
+      document.querySelectorAll(".edge").forEach((edge) => {
+        const index = Number(edge.dataset.index);
+        const isActive = activeOut.has(index);
+        const isIncoming = activeIn.has(index);
+        const anySelected = selectedScreenId || selectedTransitionIndex !== null;
+        edge.classList.toggle("is-selected", selectedTransitionIndex === index);
+        edge.classList.toggle("is-active", isActive);
+        edge.classList.toggle("is-incoming", isIncoming && !isActive);
+        edge.classList.toggle("is-muted", Boolean(anySelected && !isActive && !isIncoming));
+      });
+    }
+
+    function selectScreen(id, scroll = false) {
+      selectedScreenId = id;
+      selectedTransitionIndex = null;
+      updateInspectorForScreen(id);
+      applyHighlight();
+      if (scroll) document.querySelector(`.screen[data-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    }
+
+    function selectTransition(index) {
+      selectedTransitionIndex = index;
+      selectedScreenId = data.transitions[index].from;
+      updateInspectorForTransition(index);
+      applyHighlight();
+    }
+
+    function renderFullscreenLinks(screenId) {
+      const outgoing = data.transitions
+        .map((transition, index) => ({ ...transition, index }))
+        .filter((transition) => transition.from === screenId);
+      fullscreenLinks.innerHTML = outgoing.length
+        ? outgoing.map((transition) => {
+          const target = screenById[transition.to];
+          return `<button class="fullscreen-link" type="button" data-fullscreen-go="${target.id}">${transition.label}: ${target.name}</button>`;
+        }).join("")
+        : `<span class="mock-muted">У этого экрана нет исходящих переходов.</span>`;
+      fullscreenLinks.querySelectorAll("[data-fullscreen-go]").forEach((button) => {
+        button.addEventListener("click", () => openFullscreen(button.dataset.fullscreenGo));
+      });
+    }
+
+    function renderFullscreen() {
+      if (!fullscreenScreenId) return;
+      const screen = screenById[fullscreenScreenId];
+      const index = data.screens.findIndex((item) => item.id === fullscreenScreenId);
+      fullscreenTitle.textContent = screen.name;
+      fullscreenSubtitle.textContent = `${sectionNames[screen.section]} · ${screen.platform} · ${screen.note}`;
+      fullscreenCanvas.innerHTML = renderLiveScreen(screen, "fullscreen");
+      fullscreenPrev.disabled = index <= 0;
+      fullscreenNext.disabled = index >= data.screens.length - 1;
+      fullscreenPrev.dataset.target = data.screens[Math.max(0, index - 1)]?.id || "";
+      fullscreenNext.dataset.target = data.screens[Math.min(data.screens.length - 1, index + 1)]?.id || "";
+      renderFullscreenLinks(fullscreenScreenId);
+    }
+
+    function openFullscreen(screenId) {
+      if (!screenById[screenId]) return;
+      fullscreenScreenId = screenId;
+      fullscreenViewer.hidden = false;
+      fullscreenViewer.setAttribute("aria-hidden", "false");
+      document.body.classList.add("has-fullscreen");
+      selectScreen(screenId);
+      renderFullscreen();
+    }
+
+    function closeFullscreen() {
+      fullscreenScreenId = null;
+      fullscreenViewer.hidden = true;
+      fullscreenViewer.setAttribute("aria-hidden", "true");
+      fullscreenCanvas.innerHTML = "";
+      document.body.classList.remove("has-fullscreen");
+      if (location.hash.startsWith("#screen=")) history.replaceState(null, "", location.pathname + location.search);
+    }
+
+    function refreshScreen(screenId) {
+      const screen = screenById[screenId];
+      const preview = document.querySelector(`.screen[data-id="${screenId}"] .preview`);
+      if (screen && preview) preview.innerHTML = renderLiveScreen(screen, "card");
+      if (fullscreenScreenId === screenId) renderFullscreen();
+      if (selectedScreenId === screenId && selectedTransitionIndex === null) {
+        updateInspectorForScreen(screenId);
+        applyHighlight();
+      }
+    }
+
+    function handleUiAction(screenId, action, value) {
+      const state = stateFor(screenId);
+      switch (action) {
+        case "next-slide":
+          state.slide = ((state.slide || 0) + 1) % 3;
+          break;
+        case "prev-slide":
+          state.slide = ((state.slide || 0) + 2) % 3;
+          break;
+        case "set-mode":
+          state.mode = value;
+          break;
+        case "set-difficulty":
+          state.difficulty = value;
+          break;
+        case "advance-generate":
+          state.step = ((state.step || 1) % 3) + 1;
+          break;
+        case "accept-review":
+          state.accepted = true;
+          break;
+        case "focus-node":
+          state.focus = value;
+          break;
+        case "toggle-step-done":
+        case "complete-step":
+          state.done = !state.done;
+          break;
+        case "choose-answer":
+          state.answer = value;
+          state.submitted = false;
+          break;
+        case "submit-quiz":
+          state.submitted = true;
+          break;
+        case "reset-quiz":
+          state.answer = null;
+          state.submitted = false;
+          break;
+        case "toggle-details":
+          state.showDetails = !state.showDetails;
+          break;
+        case "claim-reward":
+          state.claimed = true;
+          break;
+        case "toggle-share":
+          state.shared = !state.shared;
+          break;
+        case "send-message": {
+          const draft = String(state.draft || "").trim();
+          if (draft) {
+            if (!state.messages) state.messages = [...mockData.chatSeed];
+            state.messages.push({ role: "user", text: draft });
+            state.messages.push({ role: "companion", text: "Окей. Сформулирую через пример: очередь нужна, когда запрос можно выполнить позже без потери смысла." });
+            state.draft = "";
+          }
+          break;
+        }
+        case "quick-chat":
+          state.draft = value || "Сделай пример короче";
+          break;
+        case "set-range":
+          state.range = value;
+          break;
+        case "toggle-reminders":
+          state.reminders = !state.reminders;
+          break;
+        case "set-theme":
+          state.theme = value;
+          break;
+        case "set-skin":
+          state.skin = value;
+          break;
+        case "toggle-billing":
+          state.annual = !state.annual;
+          break;
+        case "subscribe":
+          state.subscribed = true;
+          break;
+        case "start-template":
+          state.started = true;
+          break;
+        case "build-goal":
+          state.started = true;
+          break;
+        default:
+          state.lastAction = action;
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const control = event.target.closest("[data-ui-action], [data-go]");
+      if (!control) return;
+      const owner = control.closest("[data-screen-id]");
+      if (!owner) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const screenId = owner.dataset.screenId;
+      const action = control.dataset.uiAction;
+      const target = control.dataset.go;
+      const shouldOpenFullscreen = Boolean(owner.closest("#fullscreenViewer") || owner.closest(".screen"));
+      if (action) handleUiAction(screenId, action, control.dataset.value);
+      refreshScreen(screenId);
+      if (target && screenById[target]) {
+        if (shouldOpenFullscreen) openFullscreen(target);
+        else selectScreen(target, true);
+      }
+    }, true);
+
+    document.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-ui-input]");
+      if (!input) return;
+      const owner = input.closest("[data-screen-id]");
+      if (!owner) return;
+      const state = stateFor(owner.dataset.screenId);
+      state[input.dataset.uiInput] = input.value;
+    }, true);
+
+    function applyFilters() {
+      const section = sectionFilter.value;
+      const type = transitionFilter.value;
+      const query = searchInput.value.trim().toLowerCase();
+      const visibleScreens = new Set();
+
+      data.screens.forEach((screen) => {
+        const sectionOk = section === "all" || screen.section === section;
+        const queryOk = !query || `${screen.name} ${sectionNames[screen.section]} ${screen.note}`.toLowerCase().includes(query);
+        if (sectionOk && queryOk) visibleScreens.add(screen.id);
+      });
+
+      document.querySelectorAll(".screen").forEach((node) => {
+        node.classList.toggle("hidden", !visibleScreens.has(node.dataset.id));
+      });
+
+      document.querySelectorAll(".edge").forEach((edge) => {
+        const transition = data.transitions[Number(edge.dataset.index)];
+        const typeOk = type === "all" || transition.type === type;
+        const visible = typeOk && visibleScreens.has(transition.from) && visibleScreens.has(transition.to);
+        edge.classList.toggle("hidden", !visible);
+      });
+    }
+
+    function setZoom(next) {
+      zoom = Math.max(0.55, Math.min(1.25, next));
+      board.style.transform = `scale(${zoom})`;
+      document.getElementById("zoomReset").textContent = `${Math.round(zoom * 100)}%`;
+    }
+
+    function toggleLabels() {
+      labelsVisible = !labelsVisible;
+      labelToggle.setAttribute("aria-pressed", String(labelsVisible));
+      document.querySelectorAll(".edge-label, .edge-label-bg").forEach((node) => node.classList.toggle("hidden", !labelsVisible));
+    }
+
+    function openFromHash() {
+      const match = location.hash.match(/^#screen=([A-Za-z0-9_-]+)$/);
+      if (match && screenById[match[1]]) openFullscreen(match[1]);
+    }
+
+    renderLanes();
+    renderScreens();
+    renderEdges();
+    renderDemoPath();
+    selectScreen("questsHome");
+    applyFilters();
+    openFromHash();
+
+    sectionFilter.addEventListener("change", applyFilters);
+    transitionFilter.addEventListener("change", applyFilters);
+    searchInput.addEventListener("input", applyFilters);
+    window.addEventListener("hashchange", openFromHash);
+    labelToggle.addEventListener("click", toggleLabels);
+    document.getElementById("zoomOut").addEventListener("click", () => setZoom(zoom - 0.1));
+    document.getElementById("zoomIn").addEventListener("click", () => setZoom(zoom + 0.1));
+    document.getElementById("zoomReset").addEventListener("click", () => setZoom(1));
+    fullscreenClose.addEventListener("click", closeFullscreen);
+    fullscreenPrev.addEventListener("click", () => {
+      if (fullscreenPrev.dataset.target) openFullscreen(fullscreenPrev.dataset.target);
+    });
+    fullscreenNext.addEventListener("click", () => {
+      if (fullscreenNext.dataset.target) openFullscreen(fullscreenNext.dataset.target);
+    });
+    fullscreenViewer.addEventListener("click", (event) => {
+      if (event.target === fullscreenViewer) closeFullscreen();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !fullscreenViewer.hidden) closeFullscreen();
+    });
+    board.addEventListener("click", (event) => {
+      if (event.target === board || event.target === screensLayer || event.target === edgesSvg) {
+        selectedScreenId = null;
+        selectedTransitionIndex = null;
+        applyHighlight();
+      }
+    });
+
+    requestAnimationFrame(() => {
+      document.querySelector('.screen[data-id="questsHome"]')?.scrollIntoView({ block: "center", inline: "center" });
+      openFromHash();
+    });
+  </script>
+</body>
+</html>
