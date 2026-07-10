@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ORIA 2.0 - макет сайта</title>
+    <link rel="icon" href="./assets/oria-mascot.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Навигация по макету">
+        <a class="brand" href="#quests" data-go="quests" aria-label="ORIA 2.0">
+          <img src="./assets/oria-mascot.svg" alt="">
+          <span>
+            <strong>ORIA 2.0</strong>
+            <small>макет продукта</small>
+          </span>
+        </a>
+        <div class="side-section">
+          <p class="side-eyebrow">Экраны</p>
+          <nav class="screen-nav" id="screenNav"></nav>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="screenSection">Таб Квесты</p>
+            <h1 id="screenTitle">Квесты</h1>
+          </div>
+          <div class="top-actions">
+            <button class="icon-button" type="button" data-go="splash" aria-label="Запустить сценарий">
+              <span class="mini-icon">▶</span>
+            </button>
+            <button class="text-button" type="button" data-go="goal">Новый квест</button>
+          </div>
+        </header>
+
+        <section class="stage" aria-live="polite">
+          <div class="phone" id="phone">
+            <div class="status-bar">
+              <span>9:41</span>
+              <span class="status-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+            <div class="app" id="appRoot"></div>
+            <nav class="tabbar" id="tabbar" aria-label="Основные вкладки"></nav>
+          </div>
+        </section>
+      </main>
+
+      <aside class="inspector" aria-label="Переходы экрана">
+        <div class="inspector-card">
+          <p class="side-eyebrow">Поток</p>
+          <div class="flow-list" id="flowList"></div>
+        </div>
+        <div class="inspector-card compact">
+          <p class="side-eyebrow">Состояние</p>
+          <div class="state-row">
+            <span>Активный квест</span>
+            <strong>Python с нуля</strong>
+          </div>
+          <div class="state-row">
+            <span>Уровень</span>
+            <strong>7</strong>
+          </div>
+          <div class="state-row">
+            <span>XP</span>
+            <strong>1240</strong>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
