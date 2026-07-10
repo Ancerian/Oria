@@ -45,10 +45,12 @@
 
         .container {
             display: flex;
-            gap: 24px;
-            max-width: 800px;
+            gap: 20px;
+            max-width: 1000px;
+            /* Увеличено, чтобы три карточки свободно помещались в ряд */
             width: 100%;
             flex-wrap: wrap;
+            justify-content: center;
         }
 
         .card {
@@ -57,11 +59,13 @@
             border-radius: 16px;
             padding: 32px;
             flex: 1;
-            min-width: 280px;
+            min-width: 250px;
+            /* Уменьшено, чтобы избежать принудительного переноса V3 */
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             transition: transform 0.2s, border-color 0.2s;
+            box-sizing: border-box;
         }
 
         .card:hover {
@@ -73,6 +77,8 @@
             margin-top: 0;
             font-size: 1.6rem;
             color: #fff;
+            text-align: center;
+            /* Центрирование заголовков для баланса */
         }
 
         .card p {
@@ -116,9 +122,17 @@
 
         <div class="card">
             <div>
-                <h2> Макет (V2)</h2>
+                <h2>Макет (V2)</h2>
             </div>
-            <a href="./untitled folder/index.html" class="btn">Макет V2 </a>
+            <!-- Внимание: если папка называется с пробелом, лучше переименовать её в untitled-folder и в коде, и в проводнике -->
+            <a href="./untitled folder/index.html" class="btn">Макет V2</a>
+        </div>
+
+        <div class="card">
+            <div>
+                <h2>Макет (V3)</h2>
+            </div>
+            <a href="./123/index.html" class="btn">Макет V3</a>
         </div>
     </div>
 
